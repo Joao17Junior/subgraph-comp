@@ -2,7 +2,7 @@
 #include <chrono>
 #include <string>
 #include "esu.cpp"
-#include "loader.cpp" // ou "graph.cpp" conforme o nome do teu loader
+#include "loader.cpp" // or "graph.cpp" depending on your loader file name
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     std::string graph_file = argv[1];
     int target_k = std::stoi(argv[2]);
 
-    // Carregar o grafo a partir do ficheiro
+    // Load the graph from the file
     Graph G = GraphLoader::load_from_file(graph_file, false);
 
     long long sum_subgraphs = 0;
@@ -22,14 +22,14 @@ int main(int argc, char* argv[]) {
     auto start = std::chrono::steady_clock::now();
 
     if (target_k == 0) {
-        // k = 0: Calcula para todos os tamanhos k de 1 ate |V(G)|
+        // k = 0: compute all k values from 1 to |V(G)|
         ESUCounter esu;
         for (int k = 1; k <= static_cast<int>(G.get_size()); ++k) {
             sum_subgraphs += esu.count_subgraphs(G, k);
             sum_recursive_steps += esu.get_recursive_steps();
         }
     } else {
-        // k especifico
+        // Specific k
         ESUCounter esu;
         sum_subgraphs = esu.count_subgraphs(G, target_k);
         sum_recursive_steps = esu.get_recursive_steps();
@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
 
-    // --- OUTPUT FORMATADO EM JSON ---
+    // --- FORMATTED JSON OUTPUT ---
     std::cout << "{"
               << "\"algorithm\": \"ESU (C++)\","
               << "\"subgraph_size_k\": " << target_k << ","

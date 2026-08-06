@@ -4,15 +4,15 @@ import json
 import time
 import networkx as nx
 
-# --- CAMINHOS E CONFIGURAÇÕES ---
+# --- PATHS AND CONFIGURATION ---
 BIN_DIR = "bin"
-CPP_SOURCE = "cpp/main.cpp"          # Ajusta o caminho para o teu main.cpp se necessario
+CPP_SOURCE = "cpp/main.cpp"          # Adjust the path to your main.cpp if needed
 CPP_EXECUTABLE = os.path.join(BIN_DIR, "esu_counter")
 
 
 def compile_cpp(force: bool = False) -> str:
     """
-    Compila o codigo C++ para a pasta bin/ se o executavel nao existir.
+    Compiles the C++ code into the bin/ folder if the executable does not exist.
     """
     os.makedirs(BIN_DIR, exist_ok=True)
     
@@ -31,27 +31,27 @@ def compile_cpp(force: bool = False) -> str:
 
 def run_cpp_esu(graph_path: str, k: int = 3) -> dict:
     """
-    Executa o motor C++ ESU via subprocess e devolve o resultado em dicionario Python (JSON).
-    Se k = 0, o C++ calcula para todos os subgrafos.
+    Runs the C++ ESU engine via subprocess and returns the result as a Python dictionary (JSON).
+    If k = 0, the C++ code computes all subgraphs.
     """
     executable = compile_cpp()
     
     if not os.path.exists(graph_path):
         raise FileNotFoundError(f"Ficheiro de grafo não encontrado: {graph_path}")
 
-    # Executa ./bin/esu_counter <graph_path> <k>
+    # Run ./bin/esu_counter <graph_path> <k>
     cmd = [executable, graph_path, str(k)]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-    # Converte o stdout (JSON) diretamente para um dicionario Python
+    # Convert stdout (JSON) directly into a Python dictionary
     return json.loads(result.stdout)
 
 
 def run_python_esu(G: nx.Graph, k: int = 3) -> dict:
     """
-    Executa o ESU em Python puro / NetworkX para comparação.
+    Runs ESU in pure Python / NetworkX for comparison.
     """
-    from python.esu import GeneralESUCounter # Assumindo a classe ESU em Python
+    from python.esu import GeneralESUCounter # Assuming the ESU class in Python
 
     counter = GeneralESUCounter()
     
@@ -84,7 +84,7 @@ def run_python_esu(G: nx.Graph, k: int = 3) -> dict:
 
 def run_networkx_baseline(G: nx.Graph, k: int = 3) -> dict:
     """
-    Executa a contagem de subgrafos conectados induzidos usando NetworkX como baseline.
+    Runs connected induced subgraph counting using NetworkX as a baseline.
     """
     from python.nx import NetworkXCounter
 
@@ -93,6 +93,7 @@ def run_networkx_baseline(G: nx.Graph, k: int = 3) -> dict:
     
     return NetworkXCounter.count_subgraphs(G, k)
 
-# --- TESTE DAS CHAMADAS ---
+# --- CALL TEST ---
 if __name__ == "__main__":
+    compile_cpp(force=True)
     print("Hello World")

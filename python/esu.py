@@ -3,7 +3,7 @@ import networkx as nx
 
 class GeneralESUCounter:
     """
-    Universal ESU Subgraph Counter in Python.
+    Universal ESU subgraph counter in Python.
     Works for any arbitrary k >= 1 on any NetworkX graph.
     """
     
