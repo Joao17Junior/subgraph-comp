@@ -36,6 +36,7 @@ class NetworkXCounter:
 
         return {
             "algorithm": "NetworkX (Python Native)",
+            "graph_size": G.number_of_nodes(),
             "subgraph_size_k": k,
             "total_subgraphs": total_subgraphs,
             "execution_time_ms": elapsed_ms

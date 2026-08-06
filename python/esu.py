@@ -70,6 +70,7 @@ class GeneralESUCounter:
 
         return {
             "algorithm": "ESU (Python)",
+            "graph_size": G.number_of_nodes(),
             "subgraph_size_k": k,
             "total_subgraphs": self.total_subgraphs,
             "recursive_steps": self.recursive_steps,

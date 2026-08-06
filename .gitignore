@@ -1,3 +1,4 @@
 *.pdf
 /.hdocs
 /.venv
+bin/

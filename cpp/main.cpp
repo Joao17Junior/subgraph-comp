@@ -1,28 +1,53 @@
 #include <iostream>
+#include <chrono>
+#include <string>
 #include "esu.cpp"
+#include "loader.cpp" // ou "graph.cpp" conforme o nome do teu loader
 
-int main() {
-    // Create a simple undirected graph G with 5 nodes (0 to 4)
-    Graph G(5, false);
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        std::cerr << "{\"error\": \"missing arguments: ./main <graph_file> <subgraph_size_k>\"}" << std::endl;
+        return 1;
+    }
 
-    // Add edges to the graph G
-    G.add_edge(0, 1);
-    G.add_edge(0, 2);
-    G.add_edge(1, 2);
-    G.add_edge(1, 3);
-    G.add_edge(2, 4);
-    G.add_edge(3, 4);
+    std::string graph_file = argv[1];
+    int target_k = std::stoi(argv[2]);
 
-    ESUCounter esu;
-    int k = 3;
+    // Carregar o grafo a partir do ficheiro
+    Graph G = GraphLoader::load_from_file(graph_file, false);
 
-    long long subgraphs_k3 = esu.count_subgraphs(G, k);
+    long long sum_subgraphs = 0;
+    long long sum_recursive_steps = 0;
 
-    std::cout << "--- Resultado do ESU (Survey Subgraph Counting) ---" << std::endl;
-    std::cout << "Tamanho do Grafo |V(G)|: " << G.get_size() << " nos" << std::endl;
-    std::cout << "Tamanho do Subgrafo (k): " << k << std::endl;
-    std::cout << "Total de Subgrafos Encontrados: " << subgraphs_k3 << std::endl;
-    std::cout << "Passos Recursivos Dados: " << esu.get_recursive_steps() << std::endl;
+    auto start = std::chrono::steady_clock::now();
+
+    if (target_k == 0) {
+        // k = 0: Calcula para todos os tamanhos k de 1 ate |V(G)|
+        ESUCounter esu;
+        for (int k = 1; k <= static_cast<int>(G.get_size()); ++k) {
+            sum_subgraphs += esu.count_subgraphs(G, k);
+            sum_recursive_steps += esu.get_recursive_steps();
+        }
+    } else {
+        // k especifico
+        ESUCounter esu;
+        sum_subgraphs = esu.count_subgraphs(G, target_k);
+        sum_recursive_steps = esu.get_recursive_steps();
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double, std::milli> duration = end - start;
+
+    // --- OUTPUT FORMATADO EM JSON ---
+    std::cout << "{"
+              << "\"algorithm\": \"ESU (C++)\","
+              << "\"subgraph_size_k\": " << target_k << ","
+              << "\"graph_nodes\": " << G.get_size() << ","
+              << "\"graph_edges\": " << G.get_num_edges() << ","
+              << "\"total_subgraphs\": " << sum_subgraphs << ","
+              << "\"recursive_steps\": " << sum_recursive_steps << ","
+              << "\"execution_time_ms\": " << duration.count()
+              << "}" << std::endl;
 
     return 0;
 }

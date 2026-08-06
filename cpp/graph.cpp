@@ -1,3 +1,6 @@
+#ifndef GRAPH_CPP
+#define GRAPH_CPP
+
 #include <vector>
 #include <set>
 #include <utility>
@@ -84,3 +87,5 @@ public:
         return V[u].get_exclusive_neighborhood(S, V);
     }
 };
+
+#endif // GRAPH_CPP

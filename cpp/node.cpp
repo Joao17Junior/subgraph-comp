@@ -1,3 +1,6 @@
+#ifndef NODE_CPP
+#define NODE_CPP
+
 #include <vector>
 #include <algorithm>
 #include <set>
@@ -66,3 +69,5 @@ public:
         return N_exc;
     }
 };
+
+#endif // NODE_CPP
