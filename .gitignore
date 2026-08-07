@@ -1,5 +1,6 @@
-*.pdf
 /.hdocs
 /.venv
-bin/
+/bin
 python/__pycache__
+/__pycache__
+/.agents
