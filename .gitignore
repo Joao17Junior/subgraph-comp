@@ -2,3 +2,4 @@
 /.hdocs
 /.venv
 bin/
+python/__pycache__
