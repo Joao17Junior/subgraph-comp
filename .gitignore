@@ -2,6 +2,7 @@
 /.venv
 /bin
 /.agents
+/__pycache__
 __pycache__/
 python/__pycache__
 datasets/random*
