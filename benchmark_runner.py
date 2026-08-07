@@ -6,6 +6,7 @@ import networkx as nx
 
 # --- PATHS AND CONFIGURATION ---
 BIN_DIR = "bin"
+DATASETS_DIR = "datasets"
 CPP_SOURCE = "cpp/main.cpp"          # Adjust the path to your main.cpp if needed
 CPP_EXECUTABLE = os.path.join(BIN_DIR, "esu_counter")
 
@@ -17,16 +18,51 @@ def compile_cpp(force: bool = False) -> str:
     os.makedirs(BIN_DIR, exist_ok=True)
     
     if not os.path.exists(CPP_EXECUTABLE) or force:
-        print(f"🔨 Compilando {CPP_SOURCE} -> {CPP_EXECUTABLE}...")
+        print(f"Compiling {CPP_SOURCE} -> {CPP_EXECUTABLE}...")
         cmd = ["g++", "-O3", CPP_SOURCE, "-o", CPP_EXECUTABLE]
         try:
             subprocess.run(cmd, check=True)
-            print("✅ Compilação concluída com sucesso!")
+            print("Compilation completed successfully!")
         except subprocess.CalledProcessError as e:
-            print("❌ Erro ao compilar o código C++.")
+            print("Error compiling C++ code.")
             raise e
             
     return CPP_EXECUTABLE
+
+
+def save_graph_to_txt(G: nx.Graph, filename: str) -> str:
+    """
+    Saves a NetworkX graph as an edge list in the datasets/ directory for C++ reading.
+    Returns the full file path.
+    """
+    os.makedirs(DATASETS_DIR, exist_ok=True)
+    
+    # Ensures the file has .txt extension
+    if not filename.endswith(".txt"):
+        filename += ".txt"
+        
+    filepath = os.path.join(DATASETS_DIR, filename)
+    
+    with open(filepath, "w") as f:
+        for u, v in G.edges():
+            f.write(f"{u} {v}\n")
+            
+    print(f"Dataset saved to: {filepath}")
+    return filepath
+
+
+def gen_random_graph(num_nodes: int, edge_prob: float, filename: str = None) -> tuple[nx.Graph, str]:
+    """
+    Generates a random Erdős-Rényi graph, saves it to the datasets/ folder, 
+    and returns both the NetworkX graph object and the saved file path.
+    """
+    G = nx.erdos_renyi_graph(num_nodes, edge_prob)
+    
+    if filename is None:
+        filename = f"random_n{num_nodes}_p{int(edge_prob * 100)}.txt"
+        
+    filepath = save_graph_to_txt(G, filename)
+    return G, filepath
 
 
 def run_cpp_esu(graph_path: str, k: int = 3) -> dict:
@@ -37,7 +73,7 @@ def run_cpp_esu(graph_path: str, k: int = 3) -> dict:
     executable = compile_cpp()
     
     if not os.path.exists(graph_path):
-        raise FileNotFoundError(f"Ficheiro de grafo não encontrado: {graph_path}")
+        raise FileNotFoundError(f"Graph file not found: {graph_path}")
 
     # Run ./bin/esu_counter <graph_path> <k>
     cmd = [executable, graph_path, str(k)]
@@ -93,7 +129,21 @@ def run_networkx_baseline(G: nx.Graph, k: int = 3) -> dict:
     
     return NetworkXCounter.count_subgraphs(G, k)
 
+
 # --- CALL TEST ---
 if __name__ == "__main__":
     compile_cpp(force=True)
-    print("Hello World")
+    
+    # 1. Gerar e salvar um grafo aleatório de 20 nós na pasta datasets/
+    print("\n--- GENERATING SYNTHETIC DATASET ---")
+    G, dataset_path = gen_random_graph(num_nodes=20, edge_prob=0.15, filename="ds20.txt")
+
+    # 2. Testar execução do C++ com o ficheiro recém-criado
+    print("\n--- TESTING C++ ESU (k = 3) ---")
+    res_cpp = run_cpp_esu(dataset_path, k=3)
+    print(json.dumps(res_cpp, indent=2))
+
+    # 3. Testar execução do Python com o mesmo objeto Grafo
+    print("\n--- TESTING PYTHON ESU (k = 3) ---")
+    res_py = run_python_esu(G, k=3)
+    print(json.dumps(res_py, indent=2))
