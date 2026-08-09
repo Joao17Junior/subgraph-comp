@@ -6,3 +6,4 @@
 __pycache__/
 python/__pycache__
 datasets/random*
+datasets/scale_*
