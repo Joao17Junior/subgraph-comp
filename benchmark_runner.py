@@ -2,6 +2,7 @@ import os
 import subprocess
 import json
 import time
+import tracemalloc
 import psutil
 import networkx as nx
 
@@ -21,6 +22,7 @@ def compile_cpp(force: bool = False) -> str:
         cmd = ["g++", "-O3", CPP_SOURCE, "-o", CPP_EXECUTABLE]
         subprocess.run(cmd, check=True)
     return CPP_EXECUTABLE
+
 
 def compile_rand_cpp(force: bool = False) -> str:
     """Compiles the Rand-ESU C++ code into the bin/ folder if needed."""
@@ -57,62 +59,51 @@ def load_graph_from_txt(filepath: str) -> nx.Graph:
     Loads a NetworkX graph from a txt edge list, ensuring nodes are integers
     and adding isolated nodes up to the maximum ID found.
     """
-    # 1. Carregar arestas com o tipo int obrigatoriamente
     G = nx.read_edgelist(filepath, nodetype=int)
     
-    # 2. Descobrir o ID máximo e adicionar nós isolados em falta (ex: 3 e 7)
     if len(G) > 0:
         max_node = max(G.nodes())
         for node in range(max_node + 1):
             if not G.has_node(node):
-                G.add_node(node)  # Adiciona nó isolado
+                G.add_node(node)
                 
     return G
 
 
 def run_cpp_esu(graph_path: str, k: int = 3) -> dict:
-    """Runs C++ ESU engine and measures execution time + RAM usage."""
+    """Runs C++ ESU engine and returns JSON data (including RAM usage measured internally by C++)."""
     executable = compile_cpp()
     if not os.path.exists(graph_path):
         raise FileNotFoundError(f"Dataset não encontrado: {graph_path}")
 
-    process = psutil.Process()
-    mem_before = process.memory_info().rss / (1024 * 1024)
-
     cmd = [executable, graph_path, str(k)]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-    mem_after = process.memory_info().rss / (1024 * 1024)
     data = json.loads(result.stdout)
-    data["ram_usage_mb"] = max(0.01, round(mem_after - mem_before, 3))
+    data["ram_usage_mb"] = max(0.01, round(data.get("ram_usage_mb", 0.01), 3))
     return data
 
+
 def run_rand_cpp_esu(graph_path: str, k: int = 3, sampling_probability: float = 0.5, seed: int = 42) -> dict:
-    """Runs Rand-ESU in C++ and returns a JSON dictionary."""
+    """Runs Rand-ESU in C++ and returns JSON data (including RAM usage measured internally by C++)."""
     executable = compile_rand_cpp()
 
     if not os.path.exists(graph_path):
         raise FileNotFoundError(f"Dataset não encontrado: {graph_path}")
 
-    process = psutil.Process()
-    mem_before = process.memory_info().rss / (1024 * 1024)
-
     cmd = [executable, graph_path, str(k), str(sampling_probability), str(seed)]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-    mem_after = process.memory_info().rss / (1024 * 1024)
     data = json.loads(result.stdout)
-    data["ram_usage_mb"] = max(0.01, round(mem_after - mem_before, 3))
+    data["ram_usage_mb"] = max(0.01, round(data.get("ram_usage_mb", 0.01), 3))
     return data
 
 
 def run_python_esu(G: nx.Graph, k: int = 3) -> dict:
-    """Runs Pure Python ESU and measures time + RAM usage."""
+    """Runs Pure Python ESU and measures execution time + exact isolated peak RAM usage via tracemalloc."""
     from python.esu import GeneralESUCounter
 
-    process = psutil.Process()
-    mem_before = process.memory_info().rss / (1024 * 1024)
-
+    tracemalloc.start()
     counter = GeneralESUCounter()
     start_time = time.time()
 
@@ -123,9 +114,11 @@ def run_python_esu(G: nx.Graph, k: int = 3) -> dict:
             res = counter.count_subgraphs(G, current_k)
             total_subgraphs += res["total_subgraphs"]
             total_steps += res["recursive_steps"]
-        elapsed_ms = (time.time() - start_time) * 1000.0
-        mem_after = process.memory_info().rss / (1024 * 1024)
         
+        elapsed_ms = (time.time() - start_time) * 1000.0
+        _, peak_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
         return {
             "algorithm": "ESU (Python Pure)",
             "subgraph_size_k": 0,
@@ -134,23 +127,26 @@ def run_python_esu(G: nx.Graph, k: int = 3) -> dict:
             "total_subgraphs": total_subgraphs,
             "recursive_steps": total_steps,
             "execution_time_ms": elapsed_ms,
-            "ram_usage_mb": max(0.01, round(mem_after - mem_before, 3))
+            "ram_usage_mb": max(0.01, round(peak_bytes / (1024 * 1024), 3))
         }
     else:
         res = counter.count_subgraphs(G, k)
+        elapsed_ms = (time.time() - start_time) * 1000.0
+        _, peak_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
         res["graph_nodes"] = G.number_of_nodes()
         res["graph_edges"] = G.number_of_edges()
-        mem_after = process.memory_info().rss / (1024 * 1024)
-        res["ram_usage_mb"] = max(0.01, round(mem_after - mem_before, 3))
+        res["execution_time_ms"] = elapsed_ms
+        res["ram_usage_mb"] = max(0.01, round(peak_bytes / (1024 * 1024), 3))
         return res
 
+
 def run_rand_python_esu(G: nx.Graph, k: int = 3, sampling_probability: float = 0.5, seed: int = 42) -> dict:
-    """Runs Rand-ESU in Python and measures execution time + RAM usage."""
+    """Runs Rand-ESU in Python and measures execution time + exact isolated peak RAM usage via tracemalloc."""
     from python.rand_esu import RandESUCounter
 
-    process = psutil.Process()
-    mem_before = process.memory_info().rss / (1024 * 1024)
-
+    tracemalloc.start()
     counter = RandESUCounter(sampling_probability=sampling_probability, seed=seed)
     start_time = time.time()
 
@@ -166,7 +162,8 @@ def run_rand_python_esu(G: nx.Graph, k: int = 3, sampling_probability: float = 0
             total_steps += res["recursive_steps"]
 
         elapsed_ms = (time.time() - start_time) * 1000.0
-        mem_after = process.memory_info().rss / (1024 * 1024)
+        _, peak_bytes = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
 
         return {
             "algorithm": "Rand-ESU (Python)",
@@ -180,18 +177,21 @@ def run_rand_python_esu(G: nx.Graph, k: int = 3, sampling_probability: float = 0
             "total_subgraphs": total_estimated,
             "recursive_steps": total_steps,
             "execution_time_ms": elapsed_ms,
-            "ram_usage_mb": max(0.01, round(mem_after - mem_before, 3)),
+            "ram_usage_mb": max(0.01, round(peak_bytes / (1024 * 1024), 3)),
         }
 
     res = counter.count_subgraphs(G, k, sampling_probability=sampling_probability, seed=seed)
+    elapsed_ms = (time.time() - start_time) * 1000.0
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
     res["graph_nodes"] = G.number_of_nodes()
     res["graph_edges"] = G.number_of_edges()
-    mem_after = process.memory_info().rss / (1024 * 1024)
-    res["ram_usage_mb"] = max(0.01, round(mem_after - mem_before, 3))
+    res["execution_time_ms"] = elapsed_ms
+    res["ram_usage_mb"] = max(0.01, round(peak_bytes / (1024 * 1024), 3))
     return res
 
 
 if __name__ == "__main__":
-
     cpp_result = run_cpp_esu("datasets/random_n30.txt", k=0)
     print("C++ ESU Result:", cpp_result)

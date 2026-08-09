@@ -2,6 +2,7 @@
 #include <vector>
 #include <chrono>
 #include <string>
+#include <sys/resource.h>
 
 // Include the Node and Graph abstractions defined earlier
 #include "loader.cpp"
@@ -135,6 +136,11 @@ int main(int argc, char* argv[]) {
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
 
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+
+    double peak_ram_mb = static_cast<double>(usage.ru_maxrss) / 1024.0; // Convert to MB
+
     // --- FORMATTED JSON OUTPUT ---
     std::cout << "{"
             << "\"algorithm\": \"ESU (C++)\","
@@ -143,7 +149,8 @@ int main(int argc, char* argv[]) {
             << "\"graph_edges\": " << G.get_num_edges() << ","
             << "\"total_subgraphs\": " << sum_subgraphs << ","
             << "\"recursive_steps\": " << sum_recursive_steps << ","
-            << "\"execution_time_ms\": " << duration.count()
+            << "\"execution_time_ms\": " << duration.count() << ","
+            << "\"ram_usage_mb\": " << peak_ram_mb
             << "}" << std::endl;
 
     return 0;
