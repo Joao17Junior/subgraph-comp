@@ -24,7 +24,6 @@ st.set_page_config(
     layout="wide"
 )
 
-
 CUSTOM_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -178,13 +177,15 @@ p, label, span, div, input, textarea, button {
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# Ensure initial C++ compilation and the datasets/ folder exist.
+# Ensure initial C++ compilation and datasets folder exist.
 compile_cpp()
 os.makedirs(DATASETS_DIR, exist_ok=True)
 
-# Session state for benchmark results.
+# Session state initialization.
 if "benchmark_results" not in st.session_state:
     st.session_state["benchmark_results"] = None
+if "scaling_results" not in st.session_state:
+    st.session_state["scaling_results"] = None
 if "current_graph_details" not in st.session_state:
     st.session_state["current_graph_details"] = None
 if "current_graph" not in st.session_state:
@@ -199,7 +200,7 @@ if "existing_dataset_choice" not in st.session_state:
     st.session_state["existing_dataset_choice"] = None
 
 
-PALETTE = ["#2aa9a1", "#1f6f78", "#79d6cf", "#7be7df"]
+PALETTE = ["#2aa9a1", "#1f6f78", "#79d6cf", "#7be7df", "#e6f4f1", "#0b1117"]
 GRID_COLOR = "rgba(159, 177, 187, 0.12)"
 TEXT_COLOR = "#f5fbff"
 
@@ -293,12 +294,12 @@ with st.container(border=True):
     st.markdown('<div class="eyebrow">Graphlet Arena</div>', unsafe_allow_html=True)
     st.markdown('<div class="hero-title">Subgraph Benchmarking</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="hero-subtitle">Compare algorithms and implementations for subgraph enumeration on the same graph.</div>',
+        '<div class="hero-subtitle">Compare exact and randomized subgraph enumeration algorithms across custom datasets, multiple k-sizes, and node scale limits.</div>',
         unsafe_allow_html=True,
     )
 
 # --- TABS / NAVIGATION ---
-tab_main, tab_charts = st.tabs(["Main dashboard", "Charts and metrics"])
+tab_main, tab_scaling, tab_charts = st.tabs(["Main dashboard", "Node scaling benchmark", "Charts and metrics"])
 
 # ==============================================================================
 # SECTION 1: MAIN DASHBOARD
@@ -367,15 +368,15 @@ with tab_main:
                 min_value=0,
                 value=42,
                 step=1,
-                help="Used only for the Rand-ESU variants to keep the sampling repeatable.",
+                help="Used only for the Rand-ESU variants to keep sampling repeatable.",
             )
 
-            k_val = st.number_input(
-                "Subgraph size k (use 0 to evaluate all sizes)",
-                min_value=0,
-                max_value=10,
-                value=3,
-                help="k = 3 evaluates connected induced 3-node subgraphs. k = 0 runs the counter for every k up to the number of nodes.",
+            # --- MULTI-K SELECTION ---
+            selected_ks = st.multiselect(
+                "Subgraph size(s) k (select multiple or 0 for all sizes)",
+                options=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                default=[3],
+                help="Select one or multiple values of k to evaluate. k = 0 evaluates all sizes up to |V|.",
             )
 
             st.space("small")
@@ -403,42 +404,49 @@ with tab_main:
     if run_button:
         if not selected_algos:
             st.error("Select at least one algorithm.")
+        elif not selected_ks:
+            st.error("Select at least one subgraph size k.")
         elif st.session_state["current_graph"] is None or st.session_state["current_graph_path"] is None:
             st.error("Select or generate a valid graph first.")
         else:
             results = []
-            with st.spinner("Running benchmarks..."):
-                if "ESU (C++)" in selected_algos:
-                    res_cpp = run_cpp_esu(st.session_state["current_graph_path"], k=k_val)
-                    results.append(res_cpp)
-                
-                if "ESU (Python)" in selected_algos:
-                    res_py = run_python_esu(st.session_state["current_graph"], k=k_val)
-                    results.append(res_py)
+            with st.spinner("Running benchmarks across selected algorithms and k-values..."):
+                for k_val in selected_ks:
+                    if "ESU (C++)" in selected_algos:
+                        res_cpp = run_cpp_esu(st.session_state["current_graph_path"], k=k_val)
+                        results.append(res_cpp)
+                    
+                    if "ESU (Python)" in selected_algos:
+                        res_py = run_python_esu(st.session_state["current_graph"], k=k_val)
+                        results.append(res_py)
 
-                if "Rand-ESU (C++)" in selected_algos:
-                    res_rand_cpp = run_rand_cpp_esu(
-                        st.session_state["current_graph_path"],
-                        k=k_val,
-                        sampling_probability=rand_sampling_probability,
-                        seed=int(rand_seed),
-                    )
-                    results.append(res_rand_cpp)
+                    if "Rand-ESU (C++)" in selected_algos:
+                        res_rand_cpp = run_rand_cpp_esu(
+                            st.session_state["current_graph_path"],
+                            k=k_val,
+                            sampling_probability=rand_sampling_probability,
+                            seed=int(rand_seed),
+                        )
+                        results.append(res_rand_cpp)
 
-                if "Rand-ESU (Python)" in selected_algos:
-                    res_rand_py = run_rand_python_esu(
-                        st.session_state["current_graph"],
-                        k=k_val,
-                        sampling_probability=rand_sampling_probability,
-                        seed=int(rand_seed),
-                    )
-                    results.append(res_rand_py)
+                    if "Rand-ESU (Python)" in selected_algos:
+                        res_rand_py = run_rand_python_esu(
+                            st.session_state["current_graph"],
+                            k=k_val,
+                            sampling_probability=rand_sampling_probability,
+                            seed=int(rand_seed),
+                        )
+                        results.append(res_rand_py)
 
-            st.session_state["benchmark_results"] = pd.DataFrame(results)
+            df_temp = pd.DataFrame(results)
+            # Create a composite display label for grouping algorithms with k
+            df_temp["label_algo_k"] = df_temp["algorithm"] + " (k=" + df_temp["subgraph_size_k"].astype(str) + ")"
+
+            st.session_state["benchmark_results"] = df_temp
             st.session_state["current_graph_details"] = {
                 "nodes": st.session_state["current_graph"].number_of_nodes(),
                 "edges": st.session_state["current_graph"].number_of_edges(),
-                "k": k_val,
+                "ks": selected_ks,
                 "file": st.session_state["current_graph_name"] or os.path.basename(st.session_state["current_graph_path"]),
                 "sampling_probability": rand_sampling_probability if any("Rand-ESU" in algo for algo in selected_algos) else None,
             }
@@ -446,7 +454,108 @@ with tab_main:
 
 
 # ==============================================================================
-# SECTION 2: CHARTS AND METRICS PAGE
+# SECTION 2: NODE SCALING BENCHMARK (FEATURE 3)
+# ==============================================================================
+with tab_scaling:
+    st.subheader("📈 Node Scaling & Execution Curve Analysis")
+    st.caption("Evaluate how algorithms scale as the graph size |V| increases.")
+
+    with st.container(border=True):
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            scale_min_n = st.number_input("Min nodes (|V|_min)", min_value=5, max_value=200, value=10, step=5)
+            scale_max_n = st.number_input("Max nodes (|V|_max)", min_value=10, max_value=500, value=40, step=10)
+            scale_step_n = st.number_input("Step size", min_value=1, max_value=50, value=10)
+        with col_s2:
+            scale_p = st.slider("Edge probability (p)", min_value=0.05, max_value=1.0, value=0.15, step=0.05)
+            scale_k = st.number_input("Subgraph size k for scaling", min_value=1, max_value=10, value=3)
+        with col_s3:
+            scale_algos = st.multiselect(
+                "Algorithms to evaluate",
+                ["ESU (C++)", "ESU (Python)", "Rand-ESU (C++)", "Rand-ESU (Python)"],
+                default=["ESU (C++)", "ESU (Python)"],
+            )
+            scale_prob = st.slider("Rand-ESU p (if selected)", min_value=0.05, max_value=1.0, value=0.5, step=0.05)
+
+        run_scale_btn = st.button("🚀 Run Scaling Analysis", type="primary", width="stretch")
+
+    if run_scale_btn:
+        if scale_min_n >= scale_max_n:
+            st.error("Min nodes must be smaller than Max nodes.")
+        elif not scale_algos:
+            st.error("Select at least one algorithm.")
+        else:
+            scale_results = []
+            node_range = list(range(int(scale_min_n), int(scale_max_n) + 1, int(scale_step_n)))
+            progress_bar = st.progress(0)
+            
+            for idx, n in enumerate(node_range):
+                g, path = gen_random_graph(n, scale_p, f"scale_n{n}")
+                
+                if "ESU (C++)" in scale_algos:
+                    r = run_cpp_esu(path, k=scale_k)
+                    r["graph_nodes"] = n
+                    scale_results.append(r)
+                if "ESU (Python)" in scale_algos:
+                    r = run_python_esu(g, k=scale_k)
+                    r["graph_nodes"] = n
+                    scale_results.append(r)
+                if "Rand-ESU (C++)" in scale_algos:
+                    r = run_rand_cpp_esu(path, k=scale_k, sampling_probability=scale_prob, seed=42)
+                    r["graph_nodes"] = n
+                    scale_results.append(r)
+                if "Rand-ESU (Python)" in scale_algos:
+                    r = run_rand_python_esu(g, k=scale_k, sampling_probability=scale_prob, seed=42)
+                    r["graph_nodes"] = n
+                    scale_results.append(r)
+                
+                progress_bar.progress((idx + 1) / len(node_range))
+
+            st.session_state["scaling_results"] = pd.DataFrame(scale_results)
+            st.success("Scaling benchmark completed!")
+
+    df_scale = st.session_state["scaling_results"]
+    if df_scale is not None and not df_scale.empty:
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            fig_time_line = px.line(
+                df_scale, x="graph_nodes", y="execution_time_ms", color="algorithm",
+                markers=True, title="Execution Time (ms) vs. Number of Nodes (|V|)",
+                color_discrete_sequence=PALETTE
+            )
+            st.plotly_chart(style_plotly_figure(fig_time_line, height=400), width="stretch")
+
+        with col_c2:
+            fig_ram_line = px.line(
+                df_scale, x="graph_nodes", y="ram_usage_mb", color="algorithm",
+                markers=True, title="RAM Usage (MB) vs. Number of Nodes (|V|)",
+                color_discrete_sequence=PALETTE
+            )
+            st.plotly_chart(style_plotly_figure(fig_ram_line, height=400), width="stretch")
+
+        # --- FEATURE 4: DOWNLOAD SCALING RESULTS ---
+        st.subheader("📥 Export Scaling Data")
+        sc_csv, sc_json = st.columns(2)
+        with sc_csv:
+            st.download_button(
+                "Download Scaling Results (CSV)",
+                data=df_scale.to_csv(index=False).encode('utf-8'),
+                file_name="scaling_benchmark_results.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with sc_json:
+            st.download_button(
+                "Download Scaling Results (JSON)",
+                data=df_scale.to_json(orient="records", indent=2),
+                file_name="scaling_benchmark_results.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+
+# ==============================================================================
+# SECTION 3: CHARTS AND METRICS PAGE
 # ==============================================================================
 with tab_charts:
     df_res = st.session_state["benchmark_results"]
@@ -464,7 +573,7 @@ with tab_charts:
                 **File:** {details['file']}  
                 **Nodes (|V|):** {details['nodes']}  
                 **Edges (|E|):** {details['edges']}  
-                **k used:** {details['k']}
+                **k values used:** {details['ks']}
                 """)
                 if details.get("sampling_probability") is not None:
                     st.markdown(f"**Rand-ESU sampling probability:** {details['sampling_probability']}")
@@ -491,7 +600,7 @@ with tab_charts:
             with c1:
                 fig_time = px.bar(
                     df_res,
-                    x="algorithm",
+                    x="label_algo_k",
                     y="execution_time_ms",
                     color="algorithm",
                     title="Execution time (ms) - lower is better",
@@ -502,7 +611,7 @@ with tab_charts:
 
                 fig_ram = px.bar(
                     df_res,
-                    x="algorithm",
+                    x="label_algo_k",
                     y="ram_usage_mb",
                     color="algorithm",
                     title="RAM usage (MB) - lower is better",
@@ -514,10 +623,10 @@ with tab_charts:
             with c2:
                 fig_steps = px.bar(
                     df_res,
-                    x="algorithm",
+                    x="label_algo_k",
                     y="recursive_steps",
                     color="algorithm",
-                    title="Recursive steps in the search tree",
+                    title="Recursive steps in search tree",
                     text_auto=True,
                     color_discrete_sequence=PALETTE,
                 )
@@ -525,7 +634,7 @@ with tab_charts:
 
                 fig_subs = px.bar(
                     df_res,
-                    x="algorithm",
+                    x="label_algo_k",
                     y="total_subgraphs",
                     color="algorithm",
                     title="Total subgraphs found",
@@ -542,7 +651,7 @@ with tab_charts:
             )
 
             fig_single = px.bar(
-                df_res, x="algorithm", y=selected_metric_key, color="algorithm",
+                df_res, x="label_algo_k", y=selected_metric_key, color="algorithm",
                 title=f"Comparison: {metrics_map[selected_metric_key]}",
                 text_auto=True,
                 color_discrete_sequence=PALETTE
@@ -552,6 +661,7 @@ with tab_charts:
         st.subheader("Results table")
         summary_columns = [
             "algorithm",
+            "subgraph_size_k",
             "execution_time_ms",
             "ram_usage_mb",
             "recursive_steps",
@@ -566,3 +676,23 @@ with tab_charts:
             width="stretch",
             hide_index=True
         )
+
+        # --- FEATURE 4: EXPORT BENCHMARK DATA (CSV / JSON) ---
+        st.subheader("📥 Export Benchmark Data")
+        dl_col1, dl_col2 = st.columns(2)
+        with dl_col1:
+            st.download_button(
+                label="Download Results (CSV)",
+                data=df_res.to_csv(index=False).encode('utf-8'),
+                file_name="subgraph_benchmark_results.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        with dl_col2:
+            st.download_button(
+                label="Download Results (JSON)",
+                data=df_res.to_json(orient="records", indent=2),
+                file_name="subgraph_benchmark_results.json",
+                mime="application/json",
+                use_container_width=True
+            )
